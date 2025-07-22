@@ -172,6 +172,10 @@ You can test the server by sending emails through a configured Postfix instance 
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+**Notice:**
+- This project uses third-party crates, some of which are licensed under Apache-2.0.
+- In particular, the [mail-parser](https://crates.io/crates/mail-parser) crate is licensed under Apache-2.0. Please review its license if you redistribute or modify this software.
+
 ## Support
 
 For issues, questions, or contributions, please open an issue on GitHub.
