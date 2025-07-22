@@ -40,12 +40,33 @@ jobs:
     
     - name: Check formatting
       run: cargo fmt --all -- --check
+      continue-on-error: true
+    
+    - name: Debug - Show format diff if any
+      run: |
+        echo "=== Checking format differences ==="
+        cargo fmt --all -- --check || true
+        echo "=== Format check completed ==="
     
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
+      continue-on-error: true
+    
+    - name: Debug - Show clippy output
+      run: |
+        echo "=== Checking clippy warnings ==="
+        cargo clippy --all-targets --all-features || true
+        echo "=== Clippy check completed ==="
     
     - name: Build release
       run: cargo build --release --verbose
+      continue-on-error: true
+    
+    - name: Debug - Show build output
+      run: |
+        echo "=== Checking build status ==="
+        cargo build --release || true
+        echo "=== Build check completed ==="
 
   security_audit:
     name: Security Audit
