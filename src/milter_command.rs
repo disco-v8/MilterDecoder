@@ -16,27 +16,27 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MilterMacro {
-    Connect    = 0x43,   // 接続時マクロ（C）
-    Helo       = 0x48,   // HELO/EHLO時マクロ（H）
-    Mail       = 0x4d,   // MAIL FROM時マクロ（M）
-    Rcpt       = 0x52,   // RCPT TO時マクロ（R）
-    Eob        = 0x45,   // 本文終了時マクロ（EOB, E）
-    Data       = 0x44,   // DATAコマンド時マクロ（D）
-    Soh        = 0x54,   // ヘッダスタート時マクロ（T）
-    Header     = 0x4c,   // ヘッダ受信時マクロ（L）
-    Body       = 0x42,   // 本文受信時マクロ（B）
-    Quit       = 0x51,   // セッション終了時マクロ（Q）
+    Connect = 0x43, // 接続時マクロ（C）
+    Helo = 0x48,    // HELO/EHLO時マクロ（H）
+    Mail = 0x4d,    // MAIL FROM時マクロ（M）
+    Rcpt = 0x52,    // RCPT TO時マクロ（R）
+    Eob = 0x45,     // 本文終了時マクロ（EOB, E）
+    Data = 0x44,    // DATAコマンド時マクロ（D）
+    Soh = 0x54,     // ヘッダスタート時マクロ（T）
+    Header = 0x4c,  // ヘッダ受信時マクロ（L）
+    Body = 0x42,    // 本文受信時マクロ（B）
+    Quit = 0x51,    // セッション終了時マクロ（Q）
     // 1文字マクロ（Postfix/Sendmailでよく使われる伝統的なもの）
-    Hostname   = 0x6a,   // myhostname（j）
-    QueueId    = 0x69,   // queue_id（i）
-    DaemonName = 0x6e,   // daemon_name（n）
-    ClientName = 0x73,   // client_name（s）
-    ClientAddr = 0x72,   // client_addr（r）
-    BodyType   = 0x62,   // body_type（b）
-    Version    = 0x76,   // $version（v）
-    Space      = 0x5f,   // 空白（スペース, _）
-    Vender     = 0x7b,   // Vender拡張（複数文字マクロの開始, {）
-    Unknown(u8),         // その他・拡張・未定義（バイト値で保持）
+    Hostname = 0x6a,   // myhostname（j）
+    QueueId = 0x69,    // queue_id（i）
+    DaemonName = 0x6e, // daemon_name（n）
+    ClientName = 0x73, // client_name（s）
+    ClientAddr = 0x72, // client_addr（r）
+    BodyType = 0x62,   // body_type（b）
+    Version = 0x76,    // $version（v）
+    Space = 0x5f,      // 空白（スペース, _）
+    Vender = 0x7b,     // Vender拡張（複数文字マクロの開始, {）
+    Unknown(u8),       // その他・拡張・未定義（バイト値で保持）
 }
 
 impl MilterMacro {
@@ -94,7 +94,6 @@ impl MilterMacro {
     }
 }
 
-
 // =========================
 // Milterコマンド定義（mfdef.hより抜粋）
 // - Postfix/Sendmail互換のMilterプロトコルコマンドを列挙
@@ -103,23 +102,23 @@ impl MilterMacro {
 // =========================
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MilterCommand {
-    Abort = 0x41,      // SMFIC_ABORT ('A'): セッション中断
-    Accept = 0x61,     // SMFIC_ACCEPT ('a'): メール受理
-    AddHeader = 0x68,  // SMFIC_ADDHEADER ('h'): ヘッダ追加
+    Abort = 0x41,     // SMFIC_ABORT ('A'): セッション中断
+    Accept = 0x61,    // SMFIC_ACCEPT ('a'): メール受理
+    AddHeader = 0x68, // SMFIC_ADDHEADER ('h'): ヘッダ追加
     // AddRcpt = 0x61,    // SMFIC_ADDRCPT ('a', Acceptと重複): 宛先追加
-    Body = 0x42,       // SMFIC_BODY ('B'): 本文受信
-    Connect = 0x43,    // SMFIC_CONNECT ('C'): 接続情報
-    Data = 0x44,       // SMFIC_DATA ('D'): DATAコマンド
+    Body = 0x42,         // SMFIC_BODY ('B'): 本文受信
+    Connect = 0x43,      // SMFIC_CONNECT ('C'): 接続情報
+    Data = 0x44,         // SMFIC_DATA ('D'): DATAコマンド
     DeleteHeader = 0x64, // SMFIC_DELHEADER ('d'): ヘッダ削除
-    DeleteRcpt = 0x72, // SMFIC_DELRCPT ('r'): 宛先削除
-    Eoh = 0x45,        // SMFIC_EOH ('E'): ヘッダ終了、もしくは SMFIC_BODYEOB ('E'): ボディ終了
-    Eom = 0x4d,        // SMFIC_EOM ('M'): メール終了
-    Header = 0x4c,     // SMFIC_HEADER ('L'): ヘッダ受信
-    HeLO = 0x48,       // SMFIC_HELO ('H'): HELO受信
+    DeleteRcpt = 0x72,   // SMFIC_DELRCPT ('r'): 宛先削除
+    Eoh = 0x45,          // SMFIC_EOH ('E'): ヘッダ終了、もしくは SMFIC_BODYEOB ('E'): ボディ終了
+    Eom = 0x4d,          // SMFIC_EOM ('M'): メール終了
+    Header = 0x4c,       // SMFIC_HEADER ('L'): ヘッダ受信
+    HeLO = 0x48,         // SMFIC_HELO ('H'): HELO受信
     // Macro = 0x4d,      // SMFIC_MACRO ('M', EOMと重複): マクロ情報
-    OptNeg = 0x4f,     // SMFIC_OPTNEG ('O'): オプション交渉　Postfixからの最初の接続でこれがくる
-    Quit = 0x51,       // SMFIC_QUIT ('Q'): セッション終了
-    Rcpt = 0x52,       // SMFIC_RCPT ('R'): 宛先受信
+    OptNeg = 0x4f, // SMFIC_OPTNEG ('O'): オプション交渉　Postfixからの最初の接続でこれがくる
+    Quit = 0x51,   // SMFIC_QUIT ('Q'): セッション終了
+    Rcpt = 0x52,   // SMFIC_RCPT ('R'): 宛先受信
 }
 
 impl MilterCommand {

@@ -12,15 +12,15 @@
 // - グローバル設定CONFIGとして全体で参照可能
 // =========================
 
-use std::sync::RwLock; // RwLock: スレッド安全な設定共有
-use lazy_static::lazy_static; // lazy_static: グローバル変数初期化
+use lazy_static::lazy_static;
+use std::sync::RwLock; // RwLock: スレッド安全な設定共有 // lazy_static: グローバル変数初期化
 
 /// サーバー設定情報構造体（Listen/Client_timeoutなど）
 /// - address: サーバー待受アドレス（例: 0.0.0.0:8898）
 /// - client_timeout: クライアント無通信タイムアウト秒
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub address: String, // サーバー待受アドレス（Listen）
+    pub address: String,     // サーバー待受アドレス（Listen）
     pub client_timeout: u64, // クライアントタイムアウト秒（Client_timeout）
 }
 
@@ -34,9 +34,10 @@ pub fn load_config() -> Config {
     let text = std::fs::read_to_string("MilterDecoder.conf").expect("設定ファイル読み込み失敗"); // 設定ファイル全体を文字列で取得
     let mut address = None; // Listenアドレス初期値
     let mut client_timeout = 30u64; // タイムアウト初期値（秒）
-    for line in text.lines() { // 設定ファイル各行をループ
+    for line in text.lines() {
+        // 設定ファイル各行をループ
         let line = line.trim(); // 前後空白除去
-        // Listen設定（アドレス/ポート）
+                                // Listen設定（アドレス/ポート）
         if let Some(rest) = line.strip_prefix("Listen ") {
             let addr = rest.trim(); // アドレス部分取得
             if addr.contains(':') {
@@ -53,7 +54,7 @@ pub fn load_config() -> Config {
     }
     let address = address.unwrap_or_else(|| "[::]:8898".to_string()); // Listen未指定時はIPv4/IPv6デュアルスタック8898番ポート
     Config {
-        address, // サーバー待受アドレス
+        address,        // サーバー待受アドレス
         client_timeout, // クライアントタイムアウト秒
     }
 }

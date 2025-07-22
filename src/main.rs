@@ -14,18 +14,18 @@
 // - サーバー起動・設定管理・クライアント接続受付・シグナル処理
 // =========================
 
-mod logging; // JSTタイムスタンプ付きログ出力
-mod init; // 設定ファイル管理
 mod client; // クライアント受信処理
+mod init; // 設定ファイル管理
+mod logging; // JSTタイムスタンプ付きログ出力
 mod milter; // Milterコマンドごとのデコード・応答処理
 mod milter_command; // Milterコマンド定義
 mod parse; // メールパース・出力処理
 
-use tokio::{net::TcpListener, sync::broadcast}; // 非同期TCPサーバ・ブロードキャスト
+use init::load_config;
 use std::sync::{Arc, RwLock}; // スレッド安全な参照カウント・ロック
 #[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind}; // Unix系: シグナル受信
-use init::load_config; // 設定ファイル読込
+use tokio::{net::TcpListener, sync::broadcast}; // 非同期TCPサーバ・ブロードキャスト // 設定ファイル読込
 
 /// 非同期メイン関数（Tokioランタイム）
 /// - サーバー起動・設定管理・クライアント接続受付・シグナル処理
@@ -42,7 +42,7 @@ async fn main() {
         let config = Arc::clone(&config); // 設定参照用
         let shutdown_tx_hup = shutdown_tx.clone(); // SIGHUP用
         let shutdown_tx_term = shutdown_tx.clone(); // SIGTERM用
-        // SIGHUP受信: 設定ファイル再読込
+                                                    // SIGHUP受信: 設定ファイル再読込
         tokio::spawn(async move {
             let mut hup = signal(SignalKind::hangup()).expect("SIGHUP登録失敗");
             while hup.recv().await.is_some() {
@@ -63,7 +63,8 @@ async fn main() {
         });
     }
 
-    loop { // サーバー再起動ループ
+    loop {
+        // サーバー再起動ループ
         let current_config = config.read().unwrap().clone(); // 現在の設定取得
         printdaytimeln!("設定読込: {}", current_config.address); // バインドアドレス表示
         let bind_result = TcpListener::bind(&current_config.address).await; // TCPバインド
@@ -71,14 +72,18 @@ async fn main() {
             Ok(listener) => {
                 printdaytimeln!("待受開始: {}", current_config.address); // バインド成功
                 listener // リスナー返却
-            },
+            }
             Err(e) => {
-                eprintln!("ポートバインド失敗: {}\n他プロセスが {} 使用中?", e, current_config.address); // バインド失敗
+                eprintln!(
+                    "ポートバインド失敗: {}\n他プロセスが {} 使用中?",
+                    e, current_config.address
+                ); // バインド失敗
                 std::process::exit(1); // 異常終了
             }
         };
         let mut shutdown_rx = shutdown_tx.subscribe(); // 再起動・終了通知受信
-        loop { // クライアント受信ループ
+        loop {
+            // クライアント受信ループ
             tokio::select! {
                 Ok((stream, addr)) = listener.accept() => {
                     printdaytimeln!("接続: {}", addr); // 新規接続
