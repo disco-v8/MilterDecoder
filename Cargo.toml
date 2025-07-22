@@ -1,18 +1,24 @@
+
 [package]
-name = "RustTokioChatServer"
+name = "milter_decoder"
 version = "0.1.0"
 edition = "2021"
+authors = ["T.Kabu <kabu@fvg-on.net>"]
+description = "A high-performance Rust implementation of a Milter protocol server for MIME email parsing and analysis"
+license = "MIT"
+repository = "https://github.com/disco-v8/MilterDecoder"
+homepage = "https://github.com/disco-v8/MilterDecoder"
+documentation = "https://github.com/disco-v8/MilterDecoder#readme"
+keywords = ["milter", "email", "mime", "smtp", "postfix"]
+categories = ["email", "network-programming", "parsing"]
+readme = "README.md"
 # edition = "2024" は、まだ未対応
 
 [dependencies]
 # Tokioランタイム（フル機能を使うためにfullを指定）
 tokio = { version = "1.38", features = ["full"] }
-
-# Arc/RwLockなどでスレッド同期を扱うために標準ライブラリを使用（追加設定不要）
-
-# Unixシグナル対応（tokioのsignalモジュールは"full"に含まれている）
-
 # 日時・タイムゾーン処理用
 chrono = "0.4"
 chrono-tz = "0.8"
 lazy_static = "1.5.0"
+mail-parser = "0.11"

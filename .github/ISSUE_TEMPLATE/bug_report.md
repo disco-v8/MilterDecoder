@@ -1,31 +1,43 @@
 ---
-name: Bug Report
-about: バグの報告
-title: '[BUG] '
+name: Bug report
+about: Create a report to help us improve
+title: ''
 labels: bug
 assignees: ''
+
 ---
 
-## バグの説明
-どのような問題が発生しているか簡潔に説明してください。
+**Describe the bug**
+A clear and concise description of what the bug is.
 
-## 再現手順
-以下の手順でバグを再現できます：
-1. 
-2. 
-3. 
-4. 
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Start the server with configuration '...'
+2. Send email through Postfix
+3. Observe the output
+4. See error
 
-## 期待される動作
-どのような動作を期待していたか説明してください。
+**Expected behavior**
+A clear and concise description of what you expected to happen.
 
-## 実際の動作
-実際にどのような動作になったか説明してください。
+**Actual behavior**
+What actually happened instead.
 
-## 環境情報
-- OS: [例: Windows 11, Ubuntu 22.04, macOS 14]
-- Rust バージョン: [例: 1.75.0]
-- Cargo バージョン: [例: 1.75.0]
+**Log output**
+```
+Paste relevant log output here
+```
 
-## 追加情報
-スクリーンショット、ログ、エラーメッセージなど、問題の理解に役立つ追加情報があれば記載してください。
+**Environment (please complete the following information):**
+ - OS: [e.g. Ubuntu 22.04, CentOS 7]
+ - Rust version: [e.g. 1.70.0]
+ - MilterDecoder version: [e.g. 0.1.0]
+ - Mail server: [e.g. Postfix 3.6.4]
+
+**Configuration**
+```
+Paste your MilterDecoder.conf here
+```
+
+**Additional context**
+Add any other context about the problem here.

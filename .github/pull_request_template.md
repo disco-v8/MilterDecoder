@@ -1,29 +1,48 @@
-## 変更内容
-このプルリクエストで何を変更したか簡潔に説明してください。
+## Description
 
-## 関連Issue
-関連するIssue番号があれば記載してください（例: #123）
+Brief description of the changes in this PR.
 
-## 変更の種類
-該当するものにチェックしてください：
-- [ ] バグ修正
-- [ ] 新機能
-- [ ] ドキュメント更新
-- [ ] リファクタリング
-- [ ] テスト追加
-- [ ] その他（説明：）
+## Type of Change
 
-## テスト結果
-- [ ] `cargo test` でテストが通る
-- [ ] `cargo clippy` で警告がない
-- [ ] `cargo fmt` でフォーマットされている
-- [ ] 手動テストを実施した
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update
+- [ ] Performance improvement
+- [ ] Code refactoring
 
-## スクリーンショット・ログ
-変更によるUI変化やログ出力があれば添付してください。
+## Changes Made
 
-## チェックリスト
-- [ ] コードレビューを受ける準備ができている
-- [ ] ドキュメントを更新した（必要な場合）
-- [ ] 後方互換性を保っている
-- [ ] セキュリティ上の問題がない
+- List the specific changes made
+- Include any new dependencies or configuration changes
+- Mention any breaking changes
+
+## Testing
+
+- [ ] I have tested these changes locally
+- [ ] I have added tests that prove my fix is effective or that my feature works
+- [ ] New and existing unit tests pass locally with my changes
+- [ ] I have tested with a real mail server (Postfix/Sendmail)
+
+## Testing Steps
+
+1. Step one
+2. Step two
+3. Expected result
+
+## Checklist
+
+- [ ] My code follows the style guidelines of this project
+- [ ] I have performed a self-review of my own code
+- [ ] I have commented my code, particularly in hard-to-understand areas
+- [ ] I have made corresponding changes to the documentation
+- [ ] My changes generate no new warnings
+- [ ] Any dependent changes have been merged and published
+
+## Screenshots (if applicable)
+
+Add screenshots to help explain your changes.
+
+## Additional Notes
+
+Any additional information that reviewers should know.

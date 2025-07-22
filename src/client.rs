@@ -1,168 +1,221 @@
-// RustTokioChatServer - クライアント通信処理モジュール
-// MIT License
+// =========================
+// client.rs
+// MilterDecoder クライアント接続処理モジュール
 //
-// クレート説明:
-// - tokio: 非同期TCP通信・I/O・ブロードキャスト
-// - chrono-tz: JSTタイムゾーン処理
-// - std: 標準ライブラリ（コレクション・同期）
-// - lazy_static: グローバル静的変数
+// 【このファイルで使う主なクレート】
+// - tokio: 非同期TCP通信・I/O・ブロードキャスト・タイムアウト等の非同期処理全般（net::TcpStream, io::AsyncReadExt, sync::broadcast）
+// - std: 標準ライブラリ（アドレス、コレクション、時間、文字列操作など）
+// - super::milter_command: Milterプロトコルのコマンド種別定義・判定用（MilterCommand enum, as_str等）
+// - super::milter: Milterコマンドごとのペイロード分解・応答処理（decode_xxx群）
+// - crate::parse: MIMEメールのパース・構造化・本文抽出・添付抽出（parse_mail）
+// - crate::printdaytimeln!: JSTタイムスタンプ付きログ出力マクロ
 //
-// client.rs: クライアントとの通信処理を分離
-// 必要なクレートをインポート
-use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}, sync::broadcast}; // Tokio: TCPストリーム・非同期I/O・ブロードキャスト
-use chrono_tz::Asia::Tokyo; // chrono-tz: JSTタイムゾーン
-use crate::init; // 設定管理モジュール
-use std::collections::HashSet; // std: ハンドルネーム一覧用コレクション
-use std::sync::Mutex; // std: スレッド安全なミューテックス
-use lazy_static::lazy_static; // lazy_static: グローバル静的変数
+// 【役割】
+// - クライアント1接続ごとのMilterプロトコル非同期処理
+// - ヘッダ受信 → コマンド判定 → ペイロード受信 → コマンド別処理 → 応答送信
+// - BODYEOB時にメールパース・出力処理の呼び出し
+// - タイムアウト・エラーハンドリング・シャットダウン通知処理
+// =========================
 
-// グローバルなハンドルネーム一覧
-lazy_static! {
-    static ref HANDLE_NAMES: Mutex<HashSet<String>> = Mutex::new(HashSet::new()); // ハンドルネームを保持
-}
+use tokio::{
+    net::TcpStream,         // 非同期TCPストリーム
+    io::AsyncReadExt,       // 非同期I/Oトレイト（read等）
+    sync::broadcast         // 非同期ブロードキャストチャンネル
+};
 
-// クライアントとの通信処理（1接続あたり1スレッド）
+use super::milter_command::MilterCommand; // Milterコマンド種別定義・判定
+use super::milter::{
+    decode_optneg, decode_eoh_bodyeob, decode_connect, decode_helo,
+    decode_header, decode_data_macros, decode_body
+}; // 各Milterコマンドの分解・応答処理
+
+use crate::parse::parse_mail; // メールパース・出力処理（BODYEOB時に呼び出し）
+
+/// クライアント1接続ごとの非同期処理（Milterプロトコル）
+/// 1. ヘッダ受信 → 2. コマンド判定 → 3. ペイロード受信 → 4. コマンド別処理 → 5. 応答送信
+///    クライアント1接続ごとのMilterプロトコル非同期処理
 pub async fn handle_client(
-    mut stream: TcpStream, // クライアントとのTCPストリーム
-    mut shutdown_rx: broadcast::Receiver<()>, // サーバーからのシャットダウン通知受信用
-    msg_tx: broadcast::Sender<String>, // メッセージ送信用
+    mut stream: TcpStream,                  // クライアントTCPストリーム
+    mut shutdown_rx: broadcast::Receiver<()>, // サーバーからのシャットダウン通知受信
 ) {
-    let mut msg_rx = msg_tx.subscribe(); // メッセージ受信用Receiver
-    let mut buf = [0u8; 1024]; // 受信バッファ
-    let mut handle_name = String::new(); // ハンドルネーム
-    let peer_addr = match stream.peer_addr() { // クライアントアドレス取得
-        Ok(addr) => addr.to_string(), // アドレス取得成功
-        Err(_) => "unknown".to_string(), // 失敗時はunknown
+    // クライアントのIP:Portアドレス取得（接続元識別用）
+    let peer_addr = match stream.peer_addr() {
+        Ok(addr) => addr.to_string(), // 正常時はアドレス文字列
+        Err(_) => "unknown".to_string(), // 取得失敗時はunknown
     };
-    let mut line_buf = Vec::new(); // 受信データを一時的に溜めるバッファ
-    let mut phase = 0; // 0:ハンドルネーム未定義, 1:通常エコー
-    let config = init::CONFIG.read().unwrap().clone(); // 設定値を取得
-    let welcome_msg = format!("\
-##############################################\n\
-#### Welcome to Rust Simple Chat Server\n\
-#### You must be set HandleName, And Enjoy!\n\
-#### MaxHandleName Length : {}\n\
-#### MaxMessageLength Length : {}\n\
-#### CTRL-Y : Reset your HandleName.\n\
-#### CTRL-D : Disconnect\n\
-##############################################\n\
-", config.max_handle_name, config.max_message_length); // ウェルカムメッセージ生成
-    if stream.write_all(welcome_msg.as_bytes()).await.is_err() { // クライアントに送信し失敗したら
-        return; // 切断
-    }
-    // ここで現在の他クライアントのハンドルネーム一覧を送信
-    let list_msg = {
-        let names = HANDLE_NAMES.lock().unwrap(); // ハンドルネーム一覧をロック
-        if names.is_empty() {
-            "現在他のクライアントはいません\n".to_string() // 他に誰もいない場合
-        } else {
-            let list = names.iter().cloned().collect::<Vec<_>>().join(", "); // 一覧をカンマ区切りで連結
-            format!("現在接続中の他クライアント: {}\n", list) // 一覧メッセージ生成
+
+    // グローバル設定取得（タイムアウト秒など）
+    let config = crate::init::CONFIG.read().unwrap().clone(); // 設定をロックしてクローン
+    let timeout_duration = std::time::Duration::from_secs(config.client_timeout); // タイムアウト値をDuration化
+
+    // BODYコマンド受信後はEOHをBODYEOB扱いにするフラグ
+    let mut is_body_eob = false; // BODY受信後にEOHをBODYEOBとして扱う
+    // DATAコマンドでヘッダブロック開始/終了を判定
+    let mut is_header_block = false; // ヘッダブロック中かどうか
+    // ヘッダ情報（複数値対応）
+    let mut header_fields: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new(); // ヘッダ格納用
+    // ボディ情報
+    let mut body_field = String::new(); // ボディ格納用
+    // メインループ: 切断・エラー・タイムアウト・シャットダウン通知以外は繰り返しコマンド受信・応答
+    loop { // メインループ: 切断・エラー・タイムアウト・シャットダウン通知以外は繰り返しコマンド受信・応答
+        // --- フェーズ1: 5バイトヘッダ受信（4バイト:サイズ + 1バイト:コマンド） ---
+        let mut header = [0u8; 5]; // 5バイトのMilterヘッダバッファ
+        let mut read_bytes = 0; // 受信済みバイト数カウンタ
+        // 5バイト受信するまでループ
+        while read_bytes < 5 { // 5バイト受信するまでループ
+            // タイムアウト付きでヘッダ受信（shutdown通知も同時監視）
+            // タイムアウト・シャットダウン通知を同時監視しつつ受信
+            match tokio::select! {
+                res = tokio::time::timeout(timeout_duration, stream.read(&mut header[read_bytes..])) => res, // ヘッダ受信
+                _ = shutdown_rx.recv() => { // サーバー再起動/終了通知（ブロードキャスト）
+                    return; // サーバー都合で切断
+                }
+            } {
+                Ok(Ok(0)) => {
+                    // クライアント切断（0バイト受信）
+                    crate::printdaytimeln!("切断(phase1): {}", peer_addr);
+                    return; // ループ脱出
+                }
+                Ok(Ok(n)) => {
+                    // 受信バイト数を加算
+                    read_bytes += n; // 進捗更新
+                }
+                Ok(Err(e)) => {
+                    // 受信エラー（I/O例外）
+                    crate::printdaytimeln!("受信エラー: {}: {}", peer_addr, e);
+                    return; // ループ脱出
+                }
+                Err(_) => {
+                    // タイムアウト切断
+                    crate::printdaytimeln!("タイムアウト: {} ({}秒間無通信)", peer_addr, config.client_timeout);
+                    return; // ループ脱出
+                }
+            }
         }
-    }; // MutexGuardはここでドロップされる
-    let _ = stream.write_all(list_msg.as_bytes()).await; // 一覧をクライアントに送信
-    loop { // メインループ
-        if phase == 0 && handle_name.is_empty() { // ハンドルネーム未定義なら入力促し
-            let prompt = "SYSTEM> ハンドルネームを入力してください\n"; // 入力促しメッセージ
-            if stream.write_all(prompt.as_bytes()).await.is_err() { // 送信失敗時は切断
+
+        // --- フェーズ2: コマンド判定（Milterコマンド種別） ---
+        let size = u32::from_be_bytes([header[0], header[1], header[2], header[3]]); // 4バイト:コマンド+ペイロードサイズ
+        let command = header[4]; // 1バイト:コマンド種別
+        let milter_cmd = MilterCommand::from_u8(command); // コマンド種別をenum化
+        match milter_cmd { // コマンド種別ごとに分岐
+            Some(cmd) => {
+                // EOHコマンド時はEOH/BODYEOB名で出力、それ以外は通常名
+                if let MilterCommand::Eoh = cmd {
+                    let eoh_str = MilterCommand::Eoh.as_str_eoh(is_body_eob);
+                    crate::printdaytimeln!(
+                        "コマンド受信: {} (0x{:02X}) size={} from {} [is_body_eob={}]",
+                        eoh_str, command, size, peer_addr, is_body_eob
+                    );
+                } else {
+                    crate::printdaytimeln!(
+                        "コマンド受信: {} (0x{:02X}) size={} from {}",
+                        cmd.as_str(), command, size, peer_addr
+                    );
+                }
+            }
+            None => {
+                // 未定義コマンドは切断
+                crate::printdaytimeln!("不正コマンド: 0x{:02X} (addr: {})", command, peer_addr);
                 return;
             }
         }
-        let config = init::CONFIG.read().unwrap().clone(); // 設定を都度取得
-        tokio::select! {
-            // クライアントからの入力
-            Ok(n) = stream.read(&mut buf) => {
-                if n == 0 {
-                    crate::printdaytimeln!("切断: {} {}", peer_addr, handle_name); // 切断ログ
-                    // 切断時にハンドルネームを一覧から削除
-                    if !handle_name.is_empty() {
-                        HANDLE_NAMES.lock().unwrap().remove(&handle_name); // 削除
-                    }
-                    break;
+
+        // --- フェーズ3: ペイロード受信（4KB単位で分割） ---
+        let mut remaining = size.saturating_sub(1) as usize; // 残り受信バイト数（コマンド1バイト分除外）
+        let mut payload = Vec::with_capacity(remaining); // ペイロード格納バッファ
+        // ペイロード全体を受信するまでループ
+        while remaining > 0 { // ペイロード全体を受信するまでループ
+            // 受信するバイト数を決定（最大4KBずつ）
+            let chunk_size = std::cmp::min(4096, remaining); // 受信単位（最大4KB）
+            let mut chunk = vec![0u8; chunk_size]; // チャンクバッファを確保
+            // タイムアウト付きでペイロード受信
+            // タイムアウト・シャットダウン通知を同時監視しつつ受信
+            match tokio::select! {
+                res = tokio::time::timeout(timeout_duration, stream.read(&mut chunk)) => res, // ペイロード受信
+                _ = shutdown_rx.recv() => { // サーバー再起動/終了通知（ブロードキャスト）
+                    return; // サーバー都合で切断
                 }
-                line_buf.extend_from_slice(&buf[..n]); // バッファに追記
-                while line_buf.len() < config.max_message_length {
-                    if line_buf.contains(&0x03) || line_buf.contains(&0x04) { // CTRL-C/CTRL-D検出
-                        crate::printdaytimeln!("切断: {} {} (CTRL-C/CTRL-D検出)", peer_addr, handle_name); // ログ
-                        if !handle_name.is_empty() {
-                            HANDLE_NAMES.lock().unwrap().remove(&handle_name); // 削除
-                        }
-                        return;
-                    }
-                    if let Some(pos) = line_buf.iter().position(|&b| b == b'\n' || b == b'\r') { // 改行検出
-                        let line = line_buf.drain(..=pos).collect::<Vec<u8>>(); // 1行分取り出し
-                        let msg = String::from_utf8_lossy(&line).trim().to_string(); // UTF-8変換
-                        if line.contains(&0x03) || line.contains(&0x04) { // CTRL-C/CTRL-D検出
-                            crate::printdaytimeln!("切断: {} {}", peer_addr, handle_name); // ログ
-                            if !handle_name.is_empty() {
-                                HANDLE_NAMES.lock().unwrap().remove(&handle_name); // 削除
-                            }
-                            return;
-                        }
-                        if phase == 0 {
-                            if msg.is_empty() {
-                                continue; // 空行は無視
-                            }
-                            if !msg.chars().all(|c| !c.is_control() && !c.is_whitespace()) {
-                                let _ = stream.write_all("SYSTEM> ハンドルネームに使えない文字が含まれています\n".as_bytes()).await; // バリデーション
-                                continue;
-                            }
-                            if msg.as_bytes().len() > config.max_handle_name {
-                                let _ = stream.write_all("SYSTEM> ハンドルネームが長すぎます\n".as_bytes()).await; // 長さ超過
-                                crate::printdaytimeln!("切断: {} ハンドルネーム長オーバー", peer_addr); // ログ
-                                return;
-                            }
-                            handle_name = msg.clone(); // ハンドルネーム確定
-                            // ハンドルネームを一覧に追加
-                            HANDLE_NAMES.lock().unwrap().insert(handle_name.clone());
-                            phase = 1; // 通常モードへ
-                            crate::printdaytimeln!("確定: {} {}", peer_addr, handle_name); // ログ
-                            let welcome = format!("SYSTEM> {}さん、ようこそ\n", handle_name); // ウェルカム
-                            let _ = stream.write_all(welcome.as_bytes()).await;
-                            continue;
-                        }
-                        if phase == 1 && line.contains(&0x19) { // CTRL-Yで再定義
-                            let old = handle_name.clone();
-                            // 再定義時は古いハンドルネームを削除
-                            HANDLE_NAMES.lock().unwrap().remove(&old);
-                            handle_name.clear();
-                            phase = 0;
-                            crate::printdaytimeln!("再定義: {} {} -> (未定義)", peer_addr, old); // ログ
-                            continue;
-                        }
-                        if !msg.is_empty() {
-                            let now = chrono::Local::now().with_timezone(&Tokyo); // 現在時刻
-                            let time_str = now.format("%Y/%m/%d %H:%M").to_string(); // タイムスタンプ
-                            let echo = format!("{}> {} ({})\n", handle_name, msg, time_str); // メッセージ整形
-                            // 自分のメッセージを全体にブロードキャスト
-                            let _ = msg_tx.send(format!("{}", echo));
-                        }
-                    } else {
-                        break; // 改行がなければ抜ける
-                    }
+            } {
+                Ok(Ok(0)) => {
+                    // クライアント切断（0バイト受信）
+                    crate::printdaytimeln!("切断(phase3): {}", peer_addr);
+                    return; // ループ脱出
                 }
-                if line_buf.len() >= config.max_message_length {
-                    let _ = stream.write_all("SYSTEM> 一行が長すぎます\n".as_bytes()).await; // 長さ超過
-                    line_buf.clear(); // バッファクリア
+                Ok(Ok(n)) => {
+                    // 受信データをペイロードへ格納
+                    payload.extend_from_slice(&chunk[..n]); // バッファに追加
+                    // 残りバイト数を減算
+                    remaining -= n; // 進捗更新
                 }
-            }
-            // 他クライアントからのメッセージを受信して自分に送信
-            Ok(broadcast_msg) = msg_rx.recv() => {
-                // 自分の送信分はスキップ
-//                if !broadcast_msg.starts_with(&handle_name) {
-//                    let _ = stream.write_all(broadcast_msg.as_bytes()).await;
-//                }
-                // フィルタせず全てのメッセージを自分にも送信
-                let _ = stream.write_all(broadcast_msg.as_bytes()).await;            }
-            // サーバー再起動通知受信時
-            _ = shutdown_rx.recv() => {
-                let _ = stream.write_all("サーバーを再起動するので切断します\n".as_bytes()).await; // 通知
-                // シャットダウン時もハンドルネームを削除
-                if !handle_name.is_empty() {
-                    HANDLE_NAMES.lock().unwrap().remove(&handle_name); // 削除
+                Ok(Err(e)) => {
+                    // 受信エラー（I/O例外）
+                    crate::printdaytimeln!("受信エラー: {}: {}", peer_addr, e);
+                    return; // ループ脱出
                 }
-                break; // ループ終了
+                Err(_) => {
+                    // タイムアウト切断
+                    crate::printdaytimeln!("タイムアウト: {} ({}秒間無通信)", peer_addr, config.client_timeout);
+                    return; // ループ脱出
+                }
             }
         }
-    }
+
+        // ペイロード受信完了ログ（実際の受信サイズを出力）
+        crate::printdaytimeln!("ペイロード受信完了: {} bytes from {}", payload.len(), peer_addr); // 受信サイズ出力
+
+        // --- コマンド別処理: OPTNEG, EOH/BODYEOB, その他 ---
+        if let Some(cmd) = milter_cmd { // コマンド種別ごとに処理分岐
+            // PostfixのMilterプロトコルで送られてくる順番に分岐を並び替え
+            // 主要なMilterコマンドごとに分岐し、各処理を実行
+            if let MilterCommand::OptNeg = cmd {
+                // OPTNEGコマンド解析処理（ネゴシエーション情報の分解・応答）
+                decode_optneg(&mut stream, &payload).await; // ネゴシエーション応答
+            } else if let MilterCommand::Connect = cmd {
+                // CONNECTコマンド時は接続情報の分解＆応答（milter.rsに分離）
+                decode_connect(&mut stream, &payload, &peer_addr).await; // 接続情報応答
+            } else if let MilterCommand::HeLO = cmd {
+                // HELOコマンド時はHELO情報の分解＆応答（milter.rsに分離）
+                decode_helo(&mut stream, &payload, &peer_addr).await; // HELO応答
+            } else if let MilterCommand::Data = cmd {
+                // DATAコマンド時(のマクロ処理)（milter.rsに分離）
+                decode_data_macros(&payload, &mut is_header_block); // マクロ情報処理
+                // DATAコマンドではCONTINUE応答を送信しなくてもよい
+            } else if let MilterCommand::Header = cmd {
+                // SMFIC_HEADER(0x4C)コマンド時、ペイロードをヘッダ配列に格納＆出力（milter.rsに分離）
+                decode_header(&payload, &mut header_fields); // ヘッダ格納
+                // HEADERコマンドではCONTINUE応答を送信しなくてもよい（Postfix互換）
+            } else if let MilterCommand::Body = cmd {
+                // BODYコマンドが来たら以降0x45はBODYEOB扱いにする
+                is_body_eob = true; // BODY受信後はEOHをBODYEOB扱い
+                is_header_block = false; // BODYコマンドでヘッダブロック終了
+                // BODYペイロードをデコード・保存（ヘッダ配列・ボディも渡す）
+                decode_body(&payload, &mut body_field); // ボディ格納
+                // BODYコマンドではCONTINUE応答を送信しなくてもよい
+            } else if let MilterCommand::Eoh = cmd {
+                // EOH/BODYEOBの判定・応答処理をmilter.rsに分離
+                decode_eoh_bodyeob(
+                    &mut stream,
+                    is_body_eob,
+                    &peer_addr
+                ).await; // EOH/BODYEOB応答
+                // BODYEOB(=is_body_eob==true)のときのみ、直前のヘッダ情報とボディ情報を出力
+                if is_body_eob {
+                    parse_mail(&header_fields, &body_field); // メールパース・出力
+                    // 出力後はいろいろクリア
+                    header_fields.clear(); // ヘッダ初期化
+                    body_field.clear(); // ボディ初期化
+                    is_body_eob = false; // BODYEOB→EOH遷移
+                }
+            } else {
+                // その他のコマンドや拡張コマンド時
+                // ペイロードデータを16進表記で出力（デバッグ用）
+                if !payload.is_empty() {
+                    let hexstr = payload.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "); // 16進ダンプ生成
+                    crate::printdaytimeln!("ペイロード: {}", hexstr); // 16進ダンプ出力
+                }
+                // その他の正式なコマンドにはCONTINUE応答を送信しない
+            }
+        }
+    } // メインループ終端
 }
+

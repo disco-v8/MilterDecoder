@@ -1,0 +1,16 @@
+# MilterDecoder Configuration File
+# 
+# This file configures the MilterDecoder server settings.
+# Reload configuration by sending SIGHUP signal to the process.
+
+# Server listen address and port
+# Format: IP:PORT or just PORT (for dual-stack [::]:PORT)
+# Examples:
+#   Listen 8898                    # IPv4/IPv6 dual-stack on port 8898
+#   Listen 192.168.1.100:4000     # IPv4 specific address
+#   Listen [::1]:8898              # IPv6 localhost
+Listen [::]:8898
+
+# Client inactivity timeout in seconds
+# Clients will be disconnected if no data is received within this time
+Client_timeout 30
