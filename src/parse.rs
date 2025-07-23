@@ -34,23 +34,27 @@ use std::collections::HashMap; // ヘッダ格納用
 /// 5. 添付ファイル名抽出・属性出力
 /// 6. NULバイト混入の可視化・除去
 pub fn parse_mail(header_fields: &HashMap<String, Vec<String>>, body_field: &str) {
-    // ヘッダ情報とボディ情報を合体し、メール全体の生データ文字列を作成
-    let mut mail_string = String::new(); // メール全体の文字列バッファ
+    // ヘッダ情報とボディ情報を合体し、RFC準拠のメール全体文字列を作成
+    let mut mail_string = String::new(); // メール全体の文字列構築用バッファ
+    
+    // Milterで受信した各ヘッダを「ヘッダ名: 値」形式でメール文字列に追加
     for (k, vlist) in header_fields {
-        // 各ヘッダ名と値リストをループ
+        // 同一ヘッダ名で複数値がある場合（Received等）も全て処理
         for v in vlist {
-            // 同じヘッダ名の複数値も対応
-            mail_string.push_str(&format!("{}: {}\r\n", k, v)); // ヘッダ1行を追加（RFC準拠のCRLF）
+            mail_string.push_str(&format!("{}: {}\r\n", k, v)); // RFC準拠のCRLF改行
         }
     }
-    mail_string.push_str("\r\n"); // ヘッダとボディの区切り（空行）
-                                  // ボディ部の改行をCRLFに正規化（RFC準拠）
-    let body_crlf = body_field.replace("\r\n", "\n").replace('\n', "\r\n"); // 改行コード統一
-    mail_string.push_str(&body_crlf); // ボディを追加
-                                      // NULバイトを可視化（<NUL>に置換）してデバッグ出力
-    let mail_string_visible = mail_string.replace("\0", "<NUL>"); // NULバイト可視化
-    crate::printdaytimeln!("--- BODYEOB時のメール全体 ---"); // 区切り線
-    crate::printdaytimeln!("{}", mail_string_visible); // 生データ出力
+    
+    mail_string.push_str("\r\n"); // ヘッダ部とボディ部の区切り空行（RFC必須）
+    
+    // ボディ部の改行コードをCRLFに統一（OS依存の改行コード差異を吸収）
+    let body_crlf = body_field.replace("\r\n", "\n").replace('\n', "\r\n");
+    mail_string.push_str(&body_crlf); // 正規化されたボディを追加
+    
+    // NULバイト（\0）を可視化文字に置換してデバッグ出力用に整形
+    let mail_string_visible = mail_string.replace("\0", "<NUL>");
+    crate::printdaytimeln!("--- BODYEOB時のメール全体 ---");
+    crate::printdaytimeln!("{}", mail_string_visible); // 生メールデータの可視化出力
 
     // mail-parserでメール全体をパース
     let parser = MessageParser::default(); // パーサーインスタンス生成
@@ -121,80 +125,123 @@ pub fn parse_mail(header_fields: &HashMap<String, Vec<String>>, body_field: &str
         }
         // マルチパートかどうか判定（パート数で判定）
         if msg.parts.len() > 1 {
-            crate::printdaytimeln!("このメールはマルチパートです"); // 複数パート
+            crate::printdaytimeln!("[mail-parser] このメールはマルチパートです"); // 複数パート
         } else {
-            crate::printdaytimeln!("このメールはシングルパートです"); // 単一パート
+            crate::printdaytimeln!("[mail-parser] このメールはシングルパートです"); // 単一パート
         }
         // テキストパート数・非テキストパート数をカウント
-        let mut text_count = 0; // テキストパート数
-        let mut non_text_count = 0; // 非テキストパート数
-                                    // テキストパートのインデックスリストを作成
-        let mut text_indices = Vec::new(); // テキストパートインデックス記録用
+        let mut text_count = 0; // 実際に本文出力対象となるテキストパート数
+        let mut non_text_count = 0; // 添付ファイル等の非テキストパート数
+        
+        // テキストパートのインデックスリストを作成（本文出力で使用）
+        let mut text_indices = Vec::new(); // 本文出力対象パートのインデックス記録用
+        
+        // 各パートを順番に調べてテキスト/非テキストを分類
         for (i, part) in msg.parts.iter().enumerate() {
-            // 各パートをインデックス付きでループ
+            // パートがテキスト系かどうか判定（text/plain, text/html, multipart/alternative等）
             if part.is_text() {
-                // テキストパートか判定
-                text_count += 1; // テキストパート数カウント
-                text_indices.push(i); // テキストパートのインデックス記録
+                // multipart/*系パートは親パートなので本文出力対象から除外
+                // （実際の本文はその子パートに格納されている）
+                let is_multipart = part.content_type()
+                    .is_some_and(|ct| ct.c_type.eq_ignore_ascii_case("multipart"));
+                
+                if !is_multipart {
+                    // text/plain, text/html等の実体のあるテキストパート
+                    text_count += 1; // テキストパート数をカウント
+                    text_indices.push(i); // 本文出力用にインデックスを記録
+                } else {
+                    // multipart/alternative等の親パートは本文出力対象外
+                    // （コメントのみで処理は何もしない）
+                }
             } else {
-                non_text_count += 1; // 非テキストパート数カウント
+                // application/octet-stream等の非テキストパート（添付ファイル等）
+                non_text_count += 1; // 非テキストパート数をカウント
             }
         }
         crate::printdaytimeln!("[mail-parser] テキストパート数: {}", text_count); // テキストパート数出力
         crate::printdaytimeln!("[mail-parser] 非テキストパート数: {}", non_text_count); // 非テキストパート数出力
-                                                                                        // テキストパートごとに本文を出力
+
+        // 本文出力処理：テキストパートごとに内容を出力
         for (idx, _) in text_indices.iter().enumerate() {
-            // テキストパートインデックスをループ
-            if let Some(body) = msg.body_text(idx) {
-                // 本文デコード成功時
-                crate::printdaytimeln!("本文({}): {}", idx + 1, body); // 本文出力（1ベース）
-            } else {
-                crate::printdaytimeln!("本文({}): (デコード不可)", idx + 1); // デコード不可時
+            // text/plain, text/html以外のテキストパートは本文出力をスキップ
+            // （例：text/calendar等の特殊なテキストパート）
+            let part = &msg.parts[text_indices[idx]]; // 対象パートを取得
+            
+            // Content-Typeのサブタイプ（plain, html等）を小文字で取得
+            let subtype = part.content_type().and_then(|ct| ct.c_subtype.as_deref().map(|s| s.to_ascii_lowercase()));
+            
+            if let Some(subtype) = subtype {
+                // サブタイプがplainまたはhtmlの場合のみ本文出力
+                if subtype == "plain" || subtype == "html" {
+                    // mail-parserの本文抽出メソッドでテキスト/HTML本文を取得
+                    let text = msg.body_text(idx); // プレーンテキスト本文
+                    let html = msg.body_html(idx); // HTML本文
+                    
+                    // テキスト本文があれば出力（ISO-2022-JP等からデコード済み）
+                    if let Some(body) = text {
+                        crate::printdaytimeln!("[mail-parser] TEXT本文({}): {}", idx + 1, body);
+                    }
+                    
+                    // HTML本文があれば出力（quoted-printable等からデコード済み）
+                    if let Some(html_body) = html {
+                        crate::printdaytimeln!("[mail-parser] HTML本文({}): {}", idx + 1, html_body);
+                    }
+                }
+                // text/plain, text/html以外は本文出力しない（スキップ）
             }
+            // Content-Typeが不明な場合も本文出力しない（スキップ）
         }
-        // 非テキストパートごとに属性を出力
-        let mut non_text_idx = 0; // 非テキストパートの出力用インデックス（1ベース用）
+        // 添付ファイル等の非テキストパート情報出力処理
+        let mut non_text_idx = 0; // 非テキストパートの出力用連番（1から開始）
+        
+        // 全パートを再度走査して非テキストパートの詳細情報を出力
         for part in msg.parts.iter() {
-            // 各パートを再度ループ
+            // テキストパート以外（添付ファイル、画像等）のみ処理
             if !part.is_text() {
-                // テキストパート以外のみ処理
-                // Content-Type取得（ヘッダからMIMEタイプを抽出）
+                // Content-Type情報をヘッダから抽出（MIMEタイプ特定用）
                 let ct = part
                     .headers
                     .iter()
-                    .find(|h| h.name().eq_ignore_ascii_case("content-type")) // ヘッダ名がcontent-typeか判定
-                    .map(|h| format!("{:?}", h.value())) // ヘッダ値を文字列化
-                    .unwrap_or("(不明)".to_string()); // なければ(不明)
-                                                      // エンコーディング種別を文字列化（base64等）
-                let encoding_str = format!("{:?}", part.encoding); // エンコーディング種別
-                                                                   // ファイル名（Content-Disposition/Content-Typeヘッダからfilename/name属性を抽出）
+                    .find(|h| h.name().eq_ignore_ascii_case("content-type")) // Content-Typeヘッダを検索
+                    .map(|h| format!("{:?}", h.value())) // ヘッダ値を文字列として整形
+                    .unwrap_or("(不明)".to_string()); // Content-Typeが無い場合のデフォルト値
+                
+                // Content-Transfer-Encodingの種別を文字列化（base64, quoted-printable等）
+                let encoding_str = format!("{:?}", part.encoding); // エンコーディング情報
+                
+                // ファイル名情報を複数のヘッダから抽出
                 let fname = part
                     .content_disposition() // Content-Disposition属性を取得
                     .and_then(|cd| {
+                        // filename属性を検索（一般的な添付ファイル名指定）
                         cd.attributes()
                             .unwrap_or(&[])
-                            .iter() // 属性リストをイテレート
-                            .find(|attr| attr.name.eq_ignore_ascii_case("filename")) // filename属性を探す
-                            .map(|attr| attr.value.to_string()) // 見つかれば値を文字列化
+                            .iter()
+                            .find(|attr| attr.name.eq_ignore_ascii_case("filename"))
+                            .map(|attr| attr.value.to_string())
                     })
                     .or_else(|| {
-                        part.content_type() // Content-Type属性も補助的に参照
+                        // Content-Typeのname属性も補助的にチェック（古い形式対応）
+                        part.content_type()
                             .and_then(|ct| {
                                 ct.attributes()
                                     .unwrap_or(&[])
-                                    .iter() // Content-Typeの属性リストをイテレート
-                                    .find(|attr| attr.name.eq_ignore_ascii_case("name")) // name属性を探す
-                                    .map(|attr| attr.value.to_string()) // 見つかれば値を文字列化
+                                    .iter()
+                                    .find(|attr| attr.name.eq_ignore_ascii_case("name"))
+                                    .map(|attr| attr.value.to_string())
                             })
                     })
-                    .unwrap_or_else(|| "(ファイル名なし)".to_string()); // どちらもなければ(ファイル名なし)
-                let size = part.body.len(); // パートのバイトサイズ
-                                            // 非テキストパートの属性を出力（MIMEタイプ・エンコーディング・ファイル名・サイズ）
+                    .unwrap_or_else(|| "(ファイル名なし)".to_string()); // どちらにもファイル名が無い場合
+                
+                let size = part.body.len(); // パートの生データサイズ（バイト数）
+                
+                // 非テキストパートの詳細情報を1行で出力
                 crate::printdaytimeln!(
-					"非テキストパート({}): content_type={}, encoding={}, filename={}, size={} bytes",
-					non_text_idx + 1, ct, encoding_str, fname, size
-				);
-                non_text_idx += 1; // インデックスを進める（次の非テキストパート用）
+                    "[mail-parser] 非テキストパート({}): content_type={}, encoding={}, filename={}, size={} bytes",
+                    non_text_idx + 1, ct, encoding_str, fname, size
+                );
+                
+                non_text_idx += 1; // 次の非テキストパート用に連番を進める
             }
         }
     } else {
