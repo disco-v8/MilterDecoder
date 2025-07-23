@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - 2024-07-22
+## [0.1.1] - 2025-07-23
+
+### Improved
+- Enhanced email body output logic to support both TEXT and HTML content simultaneously
+- Excluded multipart parent parts (like multipart/alternative) from body output to avoid unnecessary "decode error" messages
+- Added content type filtering to only output text/plain and text/html parts
+- Significantly improved code readability with comprehensive comments (one comment per line minimum)
+- Better error handling for various text part subtypes
+
+### Technical Improvements
+- Refined `parse.rs` body extraction logic using `body_text()` and `body_html()` methods
+- Implemented proper multipart parent part detection using `c_type.eq_ignore_ascii_case("multipart")`
+- Added detailed inline documentation explaining RFC compliance, encoding handling, and processing logic
+- Enhanced type safety with proper `Option` handling for content subtypes
+
+## [0.1.0] - 2025-07-22
 
 ### Added
 - Initial release of MilterDecoder
@@ -52,5 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chrono-tz 0.8 (timezone support)
 - lazy_static 1.5.0 (global variables)
 
-[Unreleased]: https://github.com/disco-v8/MilterDecoder/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/disco-v8/MilterDecoder/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/disco-v8/MilterDecoder/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/disco-v8/MilterDecoder/releases/tag/v0.1.0
