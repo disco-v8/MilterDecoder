@@ -25,7 +25,6 @@ pub struct Config {
 }
 
 /// 設定ファイル(MilterDecoder.conf)からConfigを生成
-/// 設定ファイル(MilterDecoder.conf)からConfigを生成
 ///
 /// # 説明
 /// - Listen <アドレス/ポート>、Client_timeout <秒> をパースしてConfig構造体に格納

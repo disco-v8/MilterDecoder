@@ -35,9 +35,7 @@ use tokio::{
 /// Milterプロトコルのネゴシエーション情報を分解し、内容を出力してOPTNEG応答を返す
 pub async fn decode_optneg(stream: &mut TcpStream, payload: &[u8]) {
     // OPTNEGペイロードは: 4バイトプロトコルバージョン + 4バイト機能フラグ + 4バイトサポートフラグ
-    // OPTNEGペイロードは12バイト以上必要（バージョン+アクション+フラグ）
     if payload.len() >= 12 {
-        // 4バイトごとに各値を抽出
         // 4バイトごとに各値を抽出
         let protocol_ver = u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]); // プロトコルバージョン
         let actions = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]); // アクションフラグ
@@ -49,7 +47,6 @@ pub async fn decode_optneg(stream: &mut TcpStream, payload: &[u8]) {
             actions,
             protocol_flags
         );
-        // 代表的なMilterアクションフラグを分解して出力
         // 代表的なMilterアクションフラグを分解して出力
         let action_flags = [
             (0x00000001, "ADD_HEADERS"),       // ヘッダ追加
@@ -67,7 +64,6 @@ pub async fn decode_optneg(stream: &mut TcpStream, payload: &[u8]) {
                 crate::printdaytimeln!("Milterアクション: {}", name); // アクションフラグごとに出力
             }
         }
-        // プロトコルフラグも分解して出力
         // プロトコルフラグも分解して出力
         let proto_flags = [
             (0x00000001, "NO_CONNECT"), // CONNECT省略
@@ -87,7 +83,6 @@ pub async fn decode_optneg(stream: &mut TcpStream, payload: &[u8]) {
             }
         }
         // OPTNEG応答バッファを生成（13バイト: コマンド1+ペイロード12）
-        // OPTNEG応答バッファを生成（13バイト: コマンド1+ペイロード12）
         let mut resp = Vec::with_capacity(13);
         resp.extend_from_slice(&13u32.to_be_bytes()); // 応答サイズ（4バイト）
         resp.push(0x4f); // コマンド: SMFIR_OPTNEG（応答コマンド）
@@ -98,8 +93,7 @@ pub async fn decode_optneg(stream: &mut TcpStream, payload: &[u8]) {
                                                              // NO_BODY(0x10)とNO_HDRS(0x20)を立てないサポートフラグを生成（ヘッダ・ボディもMilterで渡される）
         let resp_protocol_flags = protocol_flags & !(0x10 | 0x20);
         resp.extend_from_slice(&resp_protocol_flags.to_be_bytes()); // サポートフラグ（4バイト）
-                                                                    // クライアントにOPTNEG応答を送信
-                                                                    // クライアントにOPTNEG応答を送信
+        // クライアントにOPTNEG応答を送信
         match stream.write_all(&resp).await {
             Ok(_) => crate::printdaytimeln!("SMFIR_OPTNEG応答送信完了: {:?}", resp), // 送信成功時
             Err(e) => crate::printdaytimeln!("SMFIR_OPTNEG応答送信エラー: {}", e),   // 送信失敗時
@@ -110,15 +104,6 @@ pub async fn decode_optneg(stream: &mut TcpStream, payload: &[u8]) {
     }
 }
 
-/// CONNECTコマンドのデコード・応答送信処理
-///
-/// # 引数
-/// - `stream`: クライアントTCPストリーム
-/// - `payload`: 受信ペイロード
-/// - `peer_addr`: クライアントアドレス
-///
-/// # 説明
-/// 受信した接続情報を出力し、CONTINUE応答(0x06)をクライアントに返す。
 /// CONNECTコマンドのデコード・応答送信処理
 ///
 /// # 引数
@@ -148,15 +133,6 @@ pub async fn decode_connect(stream: &mut tokio::net::TcpStream, payload: &[u8], 
     }
 }
 
-/// HELOコマンドのデコード・応答送信処理
-///
-/// # 引数
-/// - `stream`: クライアントTCPストリーム
-/// - `payload`: 受信ペイロード
-/// - `peer_addr`: クライアントアドレス
-///
-/// # 説明
-/// 受信したHELO情報を出力し、CONTINUE応答(0x06)をクライアントに返す。
 /// HELOコマンドのデコード・応答送信処理
 ///
 /// # 引数
@@ -294,15 +270,6 @@ pub fn decode_body(payload: &[u8], body_field: &mut String) {
     body_field.push_str(&s); // 既存body_fieldに追記
 }
 
-/// EOH(0x45)またはBODYEOB(0x45)コマンドの判定・応答送信処理
-///
-/// # 引数
-/// - `stream`: クライアントTCPストリーム
-/// - `is_body_eob`: trueならBODYEOBとしてACCEPT応答（0x61）、falseならEOHとしてCONTINUE応答（0x06）
-/// - `peer_addr`: クライアントアドレス
-///
-/// # 説明
-/// EOH/BODYEOBコマンドを判定し、適切な応答（ACCEPT/CONTINUE）をクライアントに送信する。
 /// EOH(0x45)またはBODYEOB(0x45)コマンドの判定・応答送信処理
 ///
 /// # 引数

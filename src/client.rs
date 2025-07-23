@@ -66,7 +66,6 @@ pub async fn handle_client(
                                 // 5バイト受信するまでループ
         while read_bytes < 5 {
             // 5バイト受信するまでループ
-            // タイムアウト付きでヘッダ受信（shutdown通知も同時監視）
             // タイムアウト・シャットダウン通知を同時監視しつつ受信
             match tokio::select! {
                 res = tokio::time::timeout(timeout_duration, stream.read(&mut header[read_bytes..])) => res, // ヘッダ受信
@@ -144,8 +143,7 @@ pub async fn handle_client(
             // 受信するバイト数を決定（最大4KBずつ）
             let chunk_size = std::cmp::min(4096, remaining); // 受信単位（最大4KB）
             let mut chunk = vec![0u8; chunk_size]; // チャンクバッファを確保
-                                                   // タイムアウト付きでペイロード受信
-                                                   // タイムアウト・シャットダウン通知を同時監視しつつ受信
+            // タイムアウト付きでペイロード受信
             match tokio::select! {
                 res = tokio::time::timeout(timeout_duration, stream.read(&mut chunk)) => res, // ペイロード受信
                 _ = shutdown_rx.recv() => { // サーバー再起動/終了通知（ブロードキャスト）
