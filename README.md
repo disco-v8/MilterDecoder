@@ -91,24 +91,24 @@ kill -TERM $(pidof milter_decoder)
 The server outputs detailed email analysis to stdout with JST timestamps:
 
 ```
-[2024/07/22 15:30:45] --- BODYEOB時のメール全体 ---
-[2024/07/22 15:30:45] [mail-parser] from: sender@example.com
-[2024/07/22 15:30:45] [mail-parser] to: recipient@example.com
-[2024/07/22 15:30:45] [mail-parser] subject: Test Email
-[2024/07/22 15:30:45] [mail-parser] content-type: "text/plain; charset=utf-8"
-[2024/07/22 15:30:45] [mail-parser] テキストパート数: 1
-[2024/07/22 15:30:45] [mail-parser] 非テキストパート数: 0
-[2024/07/22 15:30:45] 本文(1): Hello, this is a test email.
+[2025/07/22 15:30:45] --- BODYEOB時のメール全体 ---
+[2025/07/22 15:30:45] [mail-parser] from: sender@example.com
+[2025/07/22 15:30:45] [mail-parser] to: recipient@example.com
+[2025/07/22 15:30:45] [mail-parser] subject: Test Email
+[2025/07/22 15:30:45] [mail-parser] content-type: "text/plain; charset=utf-8"
+[2025/07/22 15:30:45] [mail-parser] テキストパート数: 1
+[2025/07/22 15:30:45] [mail-parser] 非テキストパート数: 0
+[2025/07/22 15:30:45] 本文(1): Hello, this is a test email.
 ```
 
 ### Multi-part Email with Attachments
 
 ```
-[2024/07/22 15:31:20] このメールはマルチパートです
-[2024/07/22 15:31:20] [mail-parser] テキストパート数: 1
-[2024/07/22 15:31:20] [mail-parser] 非テキストパート数: 1
-[2024/07/22 15:31:20] 本文(1): Email body content
-[2024/07/22 15:31:20] 非テキストパート(1): content_type="application/pdf", encoding=Base64, filename=document.pdf, size=1024 bytes
+[2025/07/22 15:31:20] このメールはマルチパートです
+[2025/07/22 15:31:20] [mail-parser] テキストパート数: 1
+[2025/07/22 15:31:20] [mail-parser] 非テキストパート数: 1
+[2025/07/22 15:31:20] 本文(1): Email body content
+[2025/07/22 15:31:20] 非テキストパート(1): content_type="application/pdf", encoding=Base64, filename=document.pdf, size=1024 bytes
 ```
 
 ## Architecture

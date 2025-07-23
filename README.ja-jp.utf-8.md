@@ -4,7 +4,26 @@ MIMEメール解析用の高性能Rust実装Milterプロトコルサーバー
 
 ## 概要
 
-MilterDecoderは、Tokioを使用した非同期処理によってRustで書かれたMilter（メールフィルター）プロトコルサーバーです。メールサーバー（Postfixなど）からMilterプロトコル経由でメールデータを受信し、MIME構造を解析して、ヘッダー、本文内容、添付ファイル、エンコーディング詳細を含む詳細なメール情報を出力します。
+MilterDecoderは、Tokioを使用した```
+[2025/07/22 15:30:45] --- BODYEOB時のメール全体 ---
+[2025/07/22 15:30:45] [mail-parser] from: sender@example.com
+[2025/07/22 15:30:45] [mail-parser] to: recipient@example.com
+[2025/07/22 15:30:45] [mail-parser] subject: Test Email
+[2025/07/22 15:30:45] [mail-parser] content-type: "text/plain; charset=utf-8"
+[2025/07/22 15:30:45] [mail-parser] テキストパート数: 1
+[2025/07/22 15:30:45] [mail-parser] 非テキストパート数: 0
+[2025/07/22 15:30:45] 本文(1): Hello, this is a test email.
+```
+
+### マルチパート・添付ファイル付きメール
+
+```
+[2025/07/22 15:31:20] このメールはマルチパートです
+[2025/07/22 15:31:20] [mail-parser] テキストパート数: 1
+[2025/07/22 15:31:20] [mail-parser] 非テキストパート数: 1
+[2025/07/22 15:31:20] 本文(1): Email body content
+[2025/07/22 15:31:20] 非テキストパート(1): content_type="application/pdf", encoding=Base64, filename=document.pdf, size=1024 bytes
+```lter（メールフィルター）プロトコルサーバーです。メールサーバー（Postfixなど）からMilterプロトコル経由でメールデータを受信し、MIME構造を解析して、ヘッダー、本文内容、添付ファイル、エンコーディング詳細を含む詳細なメール情報を出力します。
 
 ## 機能
 
