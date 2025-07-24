@@ -8,6 +8,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   build-release:
     name: Build Release
@@ -42,20 +45,35 @@ jobs:
     
     - name: Install musl tools
       if: matrix.target == 'x86_64-unknown-linux-musl'
-      run: sudo apt-get install musl-tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y musl-tools
     
     - name: Build release binary
-      run: cargo build --release --target ${{ matrix.target }}
+      run: |
+        echo "Building for target: ${{ matrix.target }}"
+        echo "Binary name: ${{ matrix.binary_name }}"
+        cargo build --release --target ${{ matrix.target }} --verbose
+        echo "Build completed, checking binary:"
+        ls -la target/${{ matrix.target }}/release/ || true
     
     - name: Strip binary (Linux and macOS)
       if: matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest'
-      run: strip target/${{ matrix.target }}/release/${{ matrix.binary_name }}
+      run: |
+        if [ -f "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" ]; then
+          strip target/${{ matrix.target }}/release/${{ matrix.binary_name }}
+        fi
     
     - name: Rename binary
       shell: bash
       run: |
         mkdir -p release-assets
-        cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} release-assets/${{ matrix.asset_name }}
+        if [ -f "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" ]; then
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} release-assets/${{ matrix.asset_name }}
+        else
+          echo "Binary not found at target/${{ matrix.target }}/release/${{ matrix.binary_name }}"
+          exit 1
+        fi
     
     - name: Upload Release Assets
       uses: softprops/action-gh-release@v2
