@@ -25,6 +25,8 @@ use init::load_config;
 use std::sync::{Arc, RwLock}; // スレッド安全な参照カウント・ロック
 #[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind}; // Unix系: シグナル受信
+#[cfg(windows)]
+use tokio::signal::windows::{ctrl_c, ctrl_break}; // Windows: Ctrl+C/Break受信
 use tokio::{net::TcpListener, sync::broadcast}; // 非同期TCPサーバ・ブロードキャスト // 設定ファイル読込
 
 /// 非同期メイン関数（Tokioランタイム）
@@ -58,6 +60,35 @@ async fn main() {
             while term.recv().await.is_some() {
                 printdaytimeln!("SIGTERM受信: サーバー安全終了");
                 let _ = shutdown_tx_term.send(()); // 全クライアントへ終了通知
+                std::process::exit(0); // プロセス終了
+            }
+        });
+    }
+
+    #[cfg(windows)]
+    {
+        // Windows用のシグナル処理
+        let config = Arc::clone(&config); // 設定参照用
+        let shutdown_tx_ctrl_c = shutdown_tx.clone(); // Ctrl+C用
+        let shutdown_tx_ctrl_break = shutdown_tx.clone(); // Ctrl+Break用
+
+        // Ctrl+C受信: 設定ファイル再読込（SIGHUP相当）
+        tokio::spawn(async move {
+            let mut ctrl_c_signal = ctrl_c().expect("Ctrl+C登録失敗");
+            while ctrl_c_signal.recv().await.is_some() {
+                printdaytimeln!("Ctrl+C受信: 設定ファイル再読込");
+                let new_config = load_config(); // 新設定読込
+                *config.write().unwrap() = new_config; // 設定更新
+                let _ = shutdown_tx_ctrl_c.send(()); // 全クライアントへ再起動通知
+            }
+        });
+
+        // Ctrl+Break受信: サーバー安全終了（SIGTERM相当）
+        tokio::spawn(async move {
+            let mut ctrl_break_signal = ctrl_break().expect("Ctrl+Break登録失敗");
+            while ctrl_break_signal.recv().await.is_some() {
+                printdaytimeln!("Ctrl+Break受信: サーバー安全終了");
+                let _ = shutdown_tx_ctrl_break.send(()); // 全クライアントへ終了通知
                 std::process::exit(0); // プロセス終了
             }
         });
