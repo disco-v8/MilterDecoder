@@ -70,12 +70,10 @@ async fn main() {
 
         // Ctrl+C受信: サーバー安全終了
         tokio::spawn(async move {
-            loop {
-                if tokio::signal::ctrl_c().await.is_ok() {
-                    printdaytimeln!("Ctrl+C受信: サーバー安全終了");
-                    let _ = shutdown_tx_ctrl_c.send(()); // 全クライアントへ終了通知
-                    std::process::exit(0); // プロセス終了
-                }
+            if let Ok(()) = tokio::signal::ctrl_c().await {
+                printdaytimeln!("Ctrl+C受信: サーバー安全終了");
+                let _ = shutdown_tx_ctrl_c.send(()); // 全クライアントへ終了通知
+                std::process::exit(0); // プロセス終了
             }
         });
     }
